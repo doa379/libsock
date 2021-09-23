@@ -4,7 +4,7 @@ INCS = -I /usr/local/include -I ${LOCAL}/
 LIBS = -l ssl -l crypto
 
 SRC_LIBSOCK = sock.c
-OBJ_LIBSOCK = ${SRC_LIBSOCK:.cpp=.o}
+OBJ_LIBSOCK = ${SRC_LIBSOCK:.c=.o}
 
 CC = cc
 RELEASE_CFLAGS = -std=c99 -c -Wall -fPIE -fPIC -pedantic -O3 ${INCS}
@@ -14,11 +14,11 @@ LDFLAGS += ${LIBSPATH}
 
 all: libsock.so
 
-.cpp.o:
+.c.o:
 	@echo CC $<
 	@${CC} ${CFLAGS} $<
 
-libsockpp.so: ${OBJ_LIBSOCK}
+libsock.so: ${OBJ_LIBSOCK}
 	@echo CC -o $@
 	@${CC} -shared -o $@ ${OBJ_LIBSOCK} ${LDFLAGS} ${LIBS}
 
