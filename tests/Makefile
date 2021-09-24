@@ -1,10 +1,12 @@
-LOCAL = ..
+LOCAL = ../..
 LIBSPATH = -L ${LOCAL}/libsock -Wl,-R$(LOCAL)/libsock '-Wl,-R$$ORIGIN' -L /usr/local/lib
 INCS = -I /usr/local/include -I ${LOCAL}/
 LIBS =
 
-SRC_LIBSOCK = sock.c
-OBJ_LIBSOCK = ${SRC_LIBSOCK:.c=.o}
+SRC0 = http.c
+OBJ0 = ${SRC0:.c=.o}
+SRC1 = bio_client.c
+OBJ1 = ${SRC1:.c=.o}
 
 CC = cc
 RELEASE_CFLAGS = -std=c99 -c -Wall -fPIE -fPIC -pedantic -O3 ${INCS}
@@ -12,17 +14,21 @@ DEBUG_CFLAGS = -std=c99 -c -Wall -fPIE -fPIC -pedantic -g ${INCS}
 CFLAGS = ${RELEASE_CFLAGS}
 LDFLAGS += ${LIBSPATH}
 
-all: libsock.so
+all: http bio_client
 
 .c.o:
 	@echo CC $<
 	@${CC} ${CFLAGS} $<
 
-libsock.so: ${OBJ_LIBSOCK}
+http: ${OBJ0}
 	@echo CC -o $@
-	@${CC} -shared -o $@ ${OBJ_LIBSOCK} ${LDFLAGS} ${LIBS}
+	@${CC} -o $@ ${OBJ0} ${LDFLAGS} -l sock
+
+bio_client: ${OBJ1}
+	@echo CC -o $@
+	@${CC} -o $@ ${OBJ1} ${LDFLAGS} -l ssl -l crypto
 
 clean:
 	@echo Cleaning
-	@rm -f ${OBJ_LIBSOCK}
-	@rm -f libsock.so
+	@rm -f ${OBJ0} ${OBJ1}
+	@rm -f http bio_client
