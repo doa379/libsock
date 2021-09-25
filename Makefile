@@ -6,10 +6,10 @@ LIBS =
 SRC_LIBSOCK = sock.c
 OBJ_LIBSOCK = ${SRC_LIBSOCK:.c=.o}
 
-CC = cc
+CC = clang
 RELEASE_CFLAGS = -std=c99 -c -Wall -fPIE -fPIC -pedantic -O3 ${INCS}
 DEBUG_CFLAGS = -std=c99 -c -Wall -fPIE -fPIC -pedantic -g ${INCS}
-CFLAGS = ${RELEASE_CFLAGS}
+CFLAGS = ${DEBUG_CFLAGS}
 LDFLAGS += ${LIBSPATH}
 
 all: libsock.so

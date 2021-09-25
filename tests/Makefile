@@ -11,7 +11,7 @@ OBJ1 = ${SRC1:.c=.o}
 CC = cc
 RELEASE_CFLAGS = -std=c99 -c -Wall -fPIE -fPIC -pedantic -O3 ${INCS}
 DEBUG_CFLAGS = -std=c99 -c -Wall -fPIE -fPIC -pedantic -g ${INCS}
-CFLAGS = ${RELEASE_CFLAGS}
+CFLAGS = ${DEBUG_CFLAGS}
 LDFLAGS += ${LIBSPATH}
 
 all: http bio_client

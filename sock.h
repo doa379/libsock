@@ -5,7 +5,7 @@
 #include <netinet/in.h>
 #include <poll.h>
 
-static const char AGENT[] = "HttpClient";
+static const char AGENT[] = "TCPClient";
 static const unsigned INTERNAL_TIMEOUTMS = 250;
 
 typedef struct
@@ -19,5 +19,7 @@ typedef struct
 bool init(Http *, const char [], const unsigned);
 void deinit(Http *);
 bool conn(const Http *);
-bool performreq(char [], char [], Http *, const char []);
+bool sendreq(Http *, const char []);
+void performreq(char [], char [], Http *, const char []);
+void req(char [], Http *);
 #endif

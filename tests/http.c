@@ -13,12 +13,20 @@ int main(const int argc, const char *argv[])
   if (init(&http, argv[1], 80))
   {
     fprintf(stdout, "Connected\n");
-    char head[512], body[1024];
-    if (performreq(body, head, &http, argv[2]))
+    char head[256], body[1024];
+    performreq(body, head, &http, argv[2]);
+    fprintf(stdout, "%s\n", head);
+    fprintf(stdout, "%s\n", body);
+
+/*
+    if (sendreq(&http, argv[2]))
     {
-      fprintf(stdout, "%s\n", head);
-      fprintf(stdout, "%s\n", body);
+      char resp[1024];
+      req(resp, &http);
+      fprintf(stdout, "%s\n", resp);
     }
+*/
+
     deinit(&http);
   }
 

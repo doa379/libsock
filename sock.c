@@ -1,4 +1,5 @@
 #include <sys/socket.h>
+#include <arpa/inet.h>
 #include <netdb.h>
 #include <unistd.h>
 #include <string.h>
@@ -8,7 +9,7 @@
 
 bool init_sd(Http *http)
 {
-  return (http->sd = socket(AF_INET, SOCK_STREAM, 0) > -1);
+  return (http->sd = socket(AF_INET, SOCK_STREAM, 0)) > -1;
 }
 
 void deinit_sd(Http *http)
@@ -16,15 +17,29 @@ void deinit_sd(Http *http)
   close(http->sd);
 }
 
-void init_sa(Http *http, const char host[], const unsigned port)
+bool init_sa(Http *http, const char host[], const unsigned port)
 {
   memset(&http->sa, 0, sizeof http->sa);
   http->sa.sin_family = AF_INET;
   http->sa.sin_port = htons(port);
-  struct hostent *h = gethostbyname(host);
-  //http->sa.sin_addr.s_addr = h ? *(long *) h->h_addr_list[0] : htonl(INADDR_ANY);
-  http->sa.sin_addr = h ? *(long *) (h->h_addr) : htonl(INADDR_ANY);
+  struct addrinfo hints, *servinfo;
+  memset(&hints, 0, sizeof hints);
+  hints.ai_family = AF_UNSPEC;
+  hints.ai_socktype = SOCK_STREAM;
+  if (getaddrinfo(host, "http", &hints, &servinfo) != 0)
+    return false;
+
+  char ip[16]; 
+  for(struct addrinfo *p = servinfo; p; p = p->ai_next)
+  {
+    struct sockaddr_in *h = (struct sockaddr_in *) p->ai_addr;
+    strcpy(ip, inet_ntoa(h->sin_addr) );
+  }
+
+  freeaddrinfo(servinfo);
+  http->sa.sin_addr.s_addr = inet_addr(ip);
   strcpy(http->host, host);
+  return true;
 }
 
 void init_psd(Http *http)
@@ -43,7 +58,7 @@ bool rd(char *p, const Http *http)
   return read(http->sd, p, sizeof *p) > 0;
 }
 
-bool wr(const Http *http, const char data[])
+bool wr(Http *http, const char data[])
 {
   return write(http->sd, data, strlen(data)) > 0;
 }
@@ -56,9 +71,8 @@ bool po(Http *http, const int timeout_ms)
 
 bool init(Http *http, const char host[], const unsigned port)
 {
-  if (init_sd(http))
+  if (init_sd(http) && init_sa(http, host, port))
   {
-    init_sa(http, host, port);
     init_psd(http);
     if (conn(http))
       return true;
@@ -72,16 +86,27 @@ void deinit(Http *http)
   deinit_sd(http);
 }
 
-bool sendreq(const Http *http, const char endp[])
+bool sendreq(Http *http, const char endp[])
 {
   char request[512];
-  sprintf(request, "GET %s HTTP/1.1\r\n\
-    Host: %s\r\n\
-    User-Agent: %s\r\n\
-    Accept: */*\r\n", endp, http->host, AGENT);
-
+  sprintf(request, "GET %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: %s\r\nAccept: */*\r\n", 
+    endp, http->host, AGENT);
   strcat(request, "\r\n");
   return wr(http, request);
+}
+
+void req(char req[], Http *http)
+{
+  char p;
+  size_t i = 0;
+  while (po(http, INTERNAL_TIMEOUTMS))
+    if (rd(&p, http))
+    {
+      memcpy(req + i, &p, sizeof p);
+      i++;
+    }
+
+  req[i] = '\0';
 }
 
 bool req_header(char head[], Http *http)
@@ -94,39 +119,18 @@ bool req_header(char head[], Http *http)
       memcpy(head + i, &p, sizeof p);
       i++;
     }
+
+  head[i] = '\0';
   return strstr(head, "OK");
 }
 
-bool req_body(char body[], char head[], Http *http)
+void req_body(char body[], Http *http)
 {
-  char *cl;
-  if ((cl = strstr(head, "Content-Length:")) || 
-      (cl = strstr(head, "Content Length:")) ||
-      (cl = strstr(head, "content-length:")) ||
-      (cl = strstr(head, "content length:")))
-  {
-    char L[64];
-    strcpy(L, cl);
-    char *t = strtok(L, " ");
-    t = strtok(NULL, " ");
-    size_t l = atoi(t), i = 0;
-    char p;
-    while (i < l && po(http, INTERNAL_TIMEOUTMS))
-      if (rd(&p, http))
-      {
-        memcpy(body + i, &p, sizeof p);
-        i++;
-      }
-
-    return true;
-  }
-
-  return false;
+  req(body, http);
 }
 
-bool performreq(char body[], char head[], Http *http, const char endp[])
+void performreq(char body[], char head[], Http *http, const char endp[])
 {
-  return sendreq(http, endp) && 
-    req_header(head, http) &&
-      req_body(body, head, http);
+  if (sendreq(http, endp) && req_header(head, http))
+    req_body(body, http);
 }
