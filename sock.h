@@ -20,6 +20,7 @@ bool init(Http *, const char [], const unsigned);
 void deinit(Http *);
 bool conn(const Http *);
 bool sendreq(Http *, const char []);
-void performreq(char [], char [], Http *, const char []);
+bool performreq(char [], char [], Http *, const char []);
 void req(char [], Http *);
+void req_header(char [], Http *);
 #endif

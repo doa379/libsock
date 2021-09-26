@@ -1,11 +1,13 @@
+#define _POSIX_C_SOURCE 200112L
+
 #include <sys/socket.h>
-#include <arpa/inet.h>
 #include <netdb.h>
+#include <arpa/inet.h>
 #include <unistd.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "sock.h"
+#include <libsock/sock.h>
 
 bool init_sd(Http *http)
 {
@@ -30,10 +32,10 @@ bool init_sa(Http *http, const char host[], const unsigned port)
     return false;
 
   char ip[16]; 
-  for(struct addrinfo *p = servinfo; p; p = p->ai_next)
+  for (struct addrinfo *p = servinfo; p; p = p->ai_next)
   {
     struct sockaddr_in *h = (struct sockaddr_in *) p->ai_addr;
-    strcpy(ip, inet_ntoa(h->sin_addr) );
+    strcpy(ip, inet_ntoa(h->sin_addr));
   }
 
   freeaddrinfo(servinfo);
@@ -44,6 +46,7 @@ bool init_sa(Http *http, const char host[], const unsigned port)
 
 void init_psd(Http *http)
 {
+  memset(&http->psd, 0, sizeof http->psd);
   http->psd.fd = http->sd;
   http->psd.events = POLLIN;
 }
@@ -99,29 +102,28 @@ void req(char req[], Http *http)
 {
   char p;
   size_t i = 0;
-  while (po(http, INTERNAL_TIMEOUTMS))
-    if (rd(&p, http))
-    {
-      memcpy(req + i, &p, sizeof p);
-      i++;
-    }
+  while (po(http, INTERNAL_TIMEOUTMS) && rd(&p, http))
+  {
+    memcpy(req + i, &p, sizeof p);
+    i++;
+  }
 
   req[i] = '\0';
 }
 
-bool req_header(char head[], Http *http)
+void req_header(char head[], Http *http)
 {
   char p;
   size_t i = 0;
-  while (!strstr(head, "\r\n\r\n") && po(http, INTERNAL_TIMEOUTMS))
-    if (rd(&p, http))
-    {
-      memcpy(head + i, &p, sizeof p);
-      i++;
-    }
+  while (!strstr(head, "\r\n\r\n") &&
+      po(http, INTERNAL_TIMEOUTMS) && 
+        rd(&p, http))
+  {
+    memcpy(head + i, &p, sizeof p);
+    i++;
+  }
 
-  head[i] = '\0';
-  return strstr(head, "OK");
+  head[i - 1] = '\0';
 }
 
 void req_body(char body[], Http *http)
@@ -129,8 +131,14 @@ void req_body(char body[], Http *http)
   req(body, http);
 }
 
-void performreq(char body[], char head[], Http *http, const char endp[])
+bool performreq(char body[], char head[], Http *http, const char endp[])
 {
-  if (sendreq(http, endp) && req_header(head, http))
+  if (sendreq(http, endp))
+  {
+    req_header(head, http);
     req_body(body, http);
+    return true;
+  }
+
+  return false;
 }
