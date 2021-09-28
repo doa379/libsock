@@ -11,23 +11,20 @@ int main(const int argc, const char *argv[])
   }
 
   Http http;
-  if (init(&http, argv[1], 80))
+  if (init(&http, argv[1]))
+    fprintf(stdout, "Connected\n");
+  else
+    return -1;
+  char head[256], body[1024];
+  for (unsigned i = 0; i < 100; i++)
   {
-    char head[256], body[1024];
-    for (unsigned i = 0; i < 10; i++)
-    {
-      if (sendreq(&http, argv[2]))
-      {
-        req_header(head, &http);
-        req(body, &http);
-        fprintf(stdout, "%s\n", body);
-      }
-
-      sleep(1);
-    }
-
-    deinit(&http);
+    if (performreq(body, head, &http, argv[2]))
+      fprintf(stdout, "%s\n", body);
+    else
+      fprintf(stdout, "Unable to performreq()\n");
+    sleep(1);
   }
 
+  deinit(&http);
   return 0;
 }

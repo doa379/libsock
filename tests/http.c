@@ -10,25 +10,17 @@ int main(const int argc, const char *argv[])
   }
 
   Http http;
-  if (init(&http, argv[1], 80))
+  if (init(&http, argv[1]))
   {
     fprintf(stdout, "Connected\n");
-    char head[256], body[1024];
-    performreq(body, head, &http, argv[2]);
-    fprintf(stdout, "%s\n", head);
-    fprintf(stdout, "%s\n", body);
-
-/*
-    if (sendreq(&http, argv[2]))
+    char head[256] = { 0 }, body[1024] = { 0 };
+    if (performreq(body, head, &http, argv[2]))
     {
-      char resp[1024];
-      req(resp, &http);
-      fprintf(stdout, "%s\n", resp);
+      fprintf(stdout, "%s\n", head);
+      fprintf(stdout, "%s\n", body);
     }
-*/
-
-    deinit(&http);
   }
 
+  deinit(&http);
   return 0;
 }
