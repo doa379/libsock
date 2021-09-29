@@ -9,7 +9,7 @@ int main(const int argc, const char *argv[])
     return -1;
   }
 
-  Http http;
+  http_t http;
   if (init(&http, argv[1]))
   {
     fprintf(stdout, "Connected\n");

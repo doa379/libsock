@@ -13,7 +13,7 @@ OBJ2 = ${SRC2:.c=.o}
 CC = clang
 REL_CFLAGS = -std=c99 -c -Wall -fPIE -fPIC -pedantic -O3 ${INCS}
 DEB_CFLAGS = -std=c99 -c -Wall -fPIE -fPIC -pedantic -g ${INCS}
-CFLAGS = ${DEB_CFLAGS}
+CFLAGS = ${REL_CFLAGS}
 LDFLAGS += ${LIBSPATH}
 
 all: http http_ka bio_client

@@ -2,23 +2,22 @@
 #define SOCK_H
 
 #include <stdbool.h>
-#include <netinet/in.h>
 #include <poll.h>
 
-static const char AGENT[] = "TCPClient";
+static const char AGENT[] = "TCPRequest";
 static const unsigned INTERNAL_TIMEOUTMS = 250;
 
 typedef struct
 {
   int sockfd;
-  struct pollfd psockfd;
+  struct pollfd pollfd;
   char host[128];
-} Http;
+} http_t;
 
-bool init(Http *, const char []);
-void deinit(Http *);
-bool sendreq(Http *, const char []);
-bool performreq(char [], char [], Http *, const char []);
-void req(char [], Http *);
-void req_header(char [], Http *);
+bool init(http_t *, const char []);
+void deinit(http_t *);
+bool sendreq(http_t *, const char []);
+bool performreq(char [], char [], http_t *, const char []);
+void req(char [], http_t *);
+void req_header(char [], http_t *);
 #endif

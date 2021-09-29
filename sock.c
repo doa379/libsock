@@ -9,14 +9,14 @@
 #include <stdlib.h>
 #include <libsock/sock.h>
 
-void init_poll(Http *http)
+void init_poll(http_t *http)
 {
-  http->psockfd.fd = http->sockfd;
-  http->psockfd.events = POLLIN;
-  http->psockfd.revents = 0;
+  http->pollfd.fd = http->sockfd;
+  http->pollfd.events = POLLIN;
+  http->pollfd.revents = 0;
 }
 
-bool init(Http *http, const char host[])
+bool init(http_t *http, const char host[])
 {
   struct addrinfo hints;
   memset(&hints, 0, sizeof hints);
@@ -46,29 +46,28 @@ bool init(Http *http, const char host[])
   return false;
 }
 
-void deinit(Http *http)
+void deinit(http_t *http)
 {
-  shutdown(http->sockfd, SHUT_RDWR);
   close(http->sockfd);
 }
 
-bool pollin(Http *http, const int timeout_ms)
+bool pollin(http_t *http, const int timeout_ms)
 {
-  return poll(&http->psockfd, 1, timeout_ms) > 0 &&
-    (http->psockfd.revents & POLLIN);
+  return poll(&http->pollfd, 1, timeout_ms) > 0 &&
+    (http->pollfd.revents & POLLIN);
 }
 
-bool rd(char *p, const Http *http)
+bool rd(char *p, const http_t *http)
 {
   return read(http->sockfd, p, sizeof *p) > 0;
 }
 
-bool wr(Http *http, const char DATA[])
+bool wr(http_t *http, const char DATA[])
 {
   return write(http->sockfd, DATA, strlen(DATA)) > 0;
 }
 
-bool sendreq(Http *http, const char ENDP[])
+bool sendreq(http_t *http, const char ENDP[])
 {
   char R[512];
   sprintf(R, "GET %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: %s\r\nAccept: */*\r\n", 
@@ -77,7 +76,7 @@ bool sendreq(Http *http, const char ENDP[])
   return wr(http, R);
 }
 
-void req(char R[], Http *http)
+void req(char R[], http_t *http)
 {
   char p;
   size_t i = 0;
@@ -90,7 +89,7 @@ void req(char R[], Http *http)
   R[i] = '\0';
 }
 
-void req_head(char R[], Http *http)
+void req_head(char R[], http_t *http)
 {
   char p;
   size_t i = 0;
@@ -105,7 +104,7 @@ void req_head(char R[], Http *http)
   R[i] = '\0';
 }
 
-void req_body(char R[], Http *http, size_t l)
+void req_body(char R[], http_t *http, size_t l)
 {
   char p;
   size_t i = 0;
@@ -128,19 +127,17 @@ size_t parse_cl(const char R[])
       (cl = strstr(R, "content-length:")) ||
       (cl = strstr(R, "content length:")))
   {
-    char L[64];
+    char L[64], *l = L;
     unsigned i;
     for (i = 16; cl[i] != '\n'; i++);
-    strncpy(L, cl, i);
-    char *t = strtok(L, " ");
-    t = strtok(NULL, " ");
-    return atoi(t);
+    strncpy(L, cl + 16, i);
+    return strtoull(l, &l, 10);
   }
 
   return 0;
 }
 
-bool performreq(char BODY[], char HEAD[], Http *http, const char ENDP[])
+bool performreq(char BODY[], char HEAD[], http_t *http, const char ENDP[])
 {
   if (sendreq(http, ENDP) && pollin(http, INTERNAL_TIMEOUTMS))
   {
