@@ -9,14 +9,14 @@
 #include <stdlib.h>
 #include <libsock/sock.h>
 
-void init_poll(http_t *http)
+void init_poll(tcp_t *tcp)
 {
-  http->pollfd.fd = http->sockfd;
-  http->pollfd.events = POLLIN;
-  http->pollfd.revents = 0;
+  tcp->pollfd.fd = tcp->sockfd;
+  tcp->pollfd.events = POLLIN;
+  tcp->pollfd.revents = 0;
 }
 
-bool init(http_t *http, const char host[])
+bool init(tcp_t *tcp, const char host[], const char port[])
 {
   struct addrinfo hints;
   memset(&hints, 0, sizeof hints);
@@ -25,96 +25,94 @@ bool init(http_t *http, const char host[])
   hints.ai_flags = 0;
   hints.ai_protocol = 0;
   struct addrinfo *result;
-  if (getaddrinfo(host, "http", &hints, &result))
+  if (getaddrinfo(host, port, &hints, &result))
     return false;
 
   for (struct addrinfo *rp = result; rp; rp = rp->ai_next)
   {
-    if ((http->sockfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol)) > -1 &&
-          connect(http->sockfd, rp->ai_addr, rp->ai_addrlen) > -1)
+    if ((tcp->sockfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol)) > -1 &&
+          connect(tcp->sockfd, rp->ai_addr, rp->ai_addrlen) > -1)
     {
-      init_poll(http);
-      strcpy(http->host, host);
+      init_poll(tcp);
+      strcpy(tcp->host, host);
       freeaddrinfo(result);
       return true;
     }
     
-    deinit(http);
+    deinit(tcp);
   }
 
   freeaddrinfo(result);
   return false;
 }
 
-void deinit(http_t *http)
+void deinit(tcp_t *tcp)
 {
-  close(http->sockfd);
+  if (close(tcp->sockfd) > -1)
+    tcp->sockfd = -1;
 }
 
-bool pollin(http_t *http, const int timeout_ms)
+bool pollin(tcp_t *tcp, const int timeout_ms)
 {
-  return poll(&http->pollfd, 1, timeout_ms) > 0 &&
-    (http->pollfd.revents & POLLIN);
+  return poll(&tcp->pollfd, 1, timeout_ms) > 0 &&
+    (tcp->pollfd.revents & POLLIN);
 }
 
-bool rd(char *p, const http_t *http)
+bool pollout(tcp_t *tcp, const int timeout_ms)
 {
-  return read(http->sockfd, p, sizeof *p) > 0;
+  return poll(&tcp->pollfd, 1, timeout_ms) > 0 &&
+    (tcp->pollfd.revents & POLLOUT);
 }
 
-bool wr(http_t *http, const char DATA[])
+bool readsock(char *p, const tcp_t *tcp)
 {
-  return write(http->sockfd, DATA, strlen(DATA)) > 0;
+  return read(tcp->sockfd, p, sizeof *p) > 0;
 }
 
-bool sendreq(http_t *http, const char ENDP[])
+bool writesock(tcp_t *tcp, const char DATA[])
+{
+  return write(tcp->sockfd, DATA, strlen(DATA)) > 0;
+}
+
+bool sendreq(tcp_t *tcp, const char ENDP[])
 {
   char R[512];
   sprintf(R, "GET %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: %s\r\nAccept: */*\r\n", 
-    ENDP, http->host, AGENT);
+    ENDP, tcp->host, AGENT);
   strcat(R, "\r\n");
-  return wr(http, R);
+  return writesock(tcp, R);
 }
 
-void req(char R[], http_t *http)
+void req(char R[], tcp_t *tcp)
 {
   char p;
   size_t i = 0;
-  while (pollin(http, INTERNAL_TIMEOUTMS) && rd(&p, http))
-  {
-    memcpy(R + i, &p, sizeof p);
-    i++;
-  }
+  while (pollin(tcp, INTERNAL_TIMEOUTMS) && readsock(&p, tcp))
+    R[i++] = p;
 
   R[i] = '\0';
 }
 
-void req_head(char R[], http_t *http)
+void req_head(char R[], tcp_t *tcp)
 {
   char p;
   size_t i = 0;
   while (!strstr(R, "\r\n\r\n") &&
-      pollin(http, INTERNAL_TIMEOUTMS) &&
-        rd(&p, http))
-  {
-    memcpy(R + i, &p, sizeof p);
-    i++;
-  }
+      pollin(tcp, INTERNAL_TIMEOUTMS) &&
+        readsock(&p, tcp))
+    R[i++] = p;
 
   R[i] = '\0';
 }
 
-void req_body(char R[], http_t *http, size_t l)
+void req_body(char R[], tcp_t *tcp, size_t l)
 {
   char p;
   size_t i = 0;
   while (i < l && 
-    pollin(http, INTERNAL_TIMEOUTMS) && 
-      rd(&p, http))
-  {
-    memcpy(R + i, &p, sizeof p);
-    i++;
-  }
+    pollin(tcp, INTERNAL_TIMEOUTMS) && 
+      readsock(&p, tcp))
+    R[i++] = p;
 
   R[i] = '\0';
 }
@@ -137,13 +135,13 @@ size_t parse_cl(const char R[])
   return 0;
 }
 
-bool performreq(char BODY[], char HEAD[], http_t *http, const char ENDP[])
+bool performreq(char BODY[], char HEAD[], tcp_t *tcp, const char ENDP[])
 {
-  if (sendreq(http, ENDP) && pollin(http, INTERNAL_TIMEOUTMS))
+  if (sendreq(tcp, ENDP) && pollin(tcp, INTERNAL_TIMEOUTMS))
   {
-    req_head(HEAD, http);
+    req_head(HEAD, tcp);
     size_t len = parse_cl(HEAD);
-    req_body(BODY, http, len);
+    req_body(BODY, tcp, len);
     return true;
   }
 

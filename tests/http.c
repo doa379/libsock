@@ -9,18 +9,18 @@ int main(const int argc, const char *argv[])
     return -1;
   }
 
-  http_t http;
-  if (init(&http, argv[1]))
+  tcp_t tcp;
+  if (init(&tcp, argv[1], "http"))
   {
     fprintf(stdout, "Connected\n");
     char head[256] = { 0 }, body[1024] = { 0 };
-    if (performreq(body, head, &http, argv[2]))
+    if (performreq(body, head, &tcp, argv[2]))
     {
       fprintf(stdout, "%s\n", head);
       fprintf(stdout, "%s\n", body);
     }
   }
 
-  deinit(&http);
+  deinit(&tcp);
   return 0;
 }

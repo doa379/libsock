@@ -12,12 +12,15 @@ typedef struct
   int sockfd;
   struct pollfd pollfd;
   char host[128];
-} http_t;
+} tcp_t;
 
-bool init(http_t *, const char []);
-void deinit(http_t *);
-bool sendreq(http_t *, const char []);
-bool performreq(char [], char [], http_t *, const char []);
-void req(char [], http_t *);
-void req_header(char [], http_t *);
+bool init(tcp_t *, const char [], const char []);
+void deinit(tcp_t *);
+bool pollin(tcp_t *, const int);
+bool pollout(tcp_t *, const int);
+bool readsock(char *, const tcp_t *);
+bool sendreq(tcp_t *, const char []);
+bool performreq(char [], char [], tcp_t *, const char []);
+void req(char [], tcp_t *);
+void req_header(char [], tcp_t *);
 #endif
