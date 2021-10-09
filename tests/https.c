@@ -1,7 +1,5 @@
 #include <libsock/sock.h>
-#include <libsock/ssl.h>
 #include <string.h>
-#include <unistd.h>
 
 int main(const int argc, const char *argv[])
 {
@@ -12,19 +10,14 @@ int main(const int argc, const char *argv[])
     return -1;
   }
 
-  init_tls(0, 0);
-  tls_t tls;
-  init_clienttls(&tls, &tcp);
-  char req[256];
-  sprintf(req, "GET / HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", argv[1]);
-  write_sock(&tls, req, strlen(req));
-  if (read_sock(req, sizeof req, &tls))
+  char REQ[16384];
+  sprintf(REQ, "GET / HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", argv[1]);
+  if (writesock_ssl(&tcp, REQ) && readsock_ssl(REQ, &tcp))
   {
-    fprintf(stdout, "%s", req);
+    fprintf(stdout, "%s\n", REQ);
     fprintf(stdout, "Receive complete\n");
   }
   
-  deinit_clienttls(&tls);
   deinit(&tcp);
   return 0;
 }

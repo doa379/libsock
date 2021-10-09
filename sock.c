@@ -16,8 +16,9 @@ void init_poll(tcp_t *tcp)
   tcp->pollfd.revents = 0;
 }
 
-bool init(tcp_t *tcp, const char host[], const char port[])
+bool init(tcp_t *tcp, const char HOST[], const char PORT[])
 {
+  memset(tcp, 0, sizeof *tcp);
   struct addrinfo hints;
   memset(&hints, 0, sizeof hints);
   hints.ai_family = AF_UNSPEC;
@@ -25,7 +26,7 @@ bool init(tcp_t *tcp, const char host[], const char port[])
   hints.ai_flags = 0;
   hints.ai_protocol = 0;
   struct addrinfo *result;
-  if (getaddrinfo(host, port, &hints, &result))
+  if (getaddrinfo(HOST, PORT, &hints, &result))
     return false;
 
   for (struct addrinfo *rp = result; rp; rp = rp->ai_next)
@@ -34,7 +35,18 @@ bool init(tcp_t *tcp, const char host[], const char port[])
           connect(tcp->sockfd, rp->ai_addr, rp->ai_addrlen) > -1)
     {
       init_poll(tcp);
-      strcpy(tcp->host, host);
+      strcpy(tcp->HOST, HOST);
+      tcp->write = writesock;
+      tcp->read = readsock;
+      if (!strcmp("https", PORT) || !strcmp("443", PORT))
+      {
+        init_tls(0, 0);
+        init_clienttls(&tcp->tls, tcp->sockfd);
+        tcp->write = writesock_ssl;
+        tcp->read = readsock_ssl;
+        tcp->ssl = 1;
+      }
+
       freeaddrinfo(result);
       return true;
     }
@@ -48,6 +60,8 @@ bool init(tcp_t *tcp, const char host[], const char port[])
 
 void deinit(tcp_t *tcp)
 {
+  if (tcp->ssl)
+    deinit_clienttls(&tcp->tls);
   if (close(tcp->sockfd) > -1)
     tcp->sockfd = -1;
 }
@@ -64,30 +78,31 @@ bool pollout(tcp_t *tcp, const int timeout_ms)
     (tcp->pollfd.revents & POLLOUT);
 }
 
-bool readsock(char *p, const tcp_t *tcp)
+bool writesock(tcp_t *tcp, const char S[])
 {
-  return read(tcp->sockfd, p, sizeof *p) > 0;
+  size_t s = strlen(S);
+  return write(tcp->sockfd, S, s) == s;
 }
 
-bool writesock(tcp_t *tcp, const char DATA[])
+bool readsock(char *p, tcp_t *tcp)
 {
-  return write(tcp->sockfd, DATA, strlen(DATA)) > 0;
+  return read(tcp->sockfd, p, sizeof *p) > 0;
 }
 
 bool sendreq(tcp_t *tcp, const char ENDP[])
 {
   char R[512];
   sprintf(R, "GET %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: %s\r\nAccept: */*\r\n", 
-    ENDP, tcp->host, AGENT);
+    ENDP, tcp->HOST, AGENT);
   strcat(R, "\r\n");
-  return writesock(tcp, R);
+  return tcp->write(tcp, R);
 }
 
 void req(char R[], tcp_t *tcp)
 {
   char p;
   size_t i = 0;
-  while (pollin(tcp, INTERNAL_TIMEOUTMS) && readsock(&p, tcp))
+  while (pollin(tcp, INTERNAL_TIMEOUTMS) && tcp->read(&p, tcp))
     R[i++] = p;
 
   R[i] = '\0';
@@ -99,7 +114,7 @@ void req_head(char R[], tcp_t *tcp)
   size_t i = 0;
   while (!strstr(R, "\r\n\r\n") &&
       pollin(tcp, INTERNAL_TIMEOUTMS) &&
-        readsock(&p, tcp))
+        tcp->read(&p, tcp))
     R[i++] = p;
 
   R[i] = '\0';
@@ -111,7 +126,7 @@ void req_body(char R[], tcp_t *tcp, size_t l)
   size_t i = 0;
   while (i < l && 
     pollin(tcp, INTERNAL_TIMEOUTMS) && 
-      readsock(&p, tcp))
+      tcp->read(&p, tcp))
     R[i++] = p;
 
   R[i] = '\0';

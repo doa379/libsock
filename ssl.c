@@ -2,6 +2,7 @@
 #include <openssl/pem.h>
 #include <string.h>
 #include <unistd.h>
+#include <libsock/sock.h>
 #include <libsock/ssl.h>
 
 bool init_tls(const char CERT[], const char KEY[])
@@ -23,14 +24,13 @@ bool init_tls(const char CERT[], const char KEY[])
   return true;
 }
 
-void init_clienttls(tls_t *tls, tcp_t *tcp)
+void init_clienttls(tls_t *tls, const int sockfd)
 {
   memset(tls, 0, sizeof *tls);
-  tls->tcp = tcp;
   tls->ssl = SSL_new(ctx);
   tls->rbio = BIO_new(BIO_s_mem());
   tls->wbio = BIO_new(BIO_s_mem());
-  tls->sbio = BIO_new_socket(tcp->sockfd, BIO_NOCLOSE);
+  tls->sbio = BIO_new_socket(sockfd, BIO_NOCLOSE);
   SSL_set_connect_state(tls->ssl); /* ssl client mode */
 }
 
@@ -39,13 +39,15 @@ void deinit_clienttls(tls_t *tls)
   SSL_free(tls->ssl);
 }
 
-void write_sock(tls_t *tls, const char req[], const size_t l)
+bool writesock_ssl(tcp_t *tcp, const char S[])
 {
+  tls_t *tls = &tcp->tls;
   SSL_set_bio(tls->ssl, tls->sbio, tls->sbio);
-  SSL_write(tls->ssl, req, l);
+  const size_t s = strlen(S);
+  return SSL_write(tls->ssl, S, s) == s;
 }
-
-bool read_sock(char R[], size_t r, tls_t *tls)
+/*
+bool readsock_ssl(char R[], size_t r, tls_t *tls)
 {
   SSL_set_bio(tls->ssl, tls->rbio, tls->rbio);
   char p;
@@ -53,13 +55,70 @@ bool read_sock(char R[], size_t r, tls_t *tls)
   {
     tls->W[tls->w] = p;
     tls->W[tls->w + 1] = '\0';
-    int n = BIO_write(tls->rbio, tls->W + tls->w++, sizeof p);
-    tls->n += n;
-    if (n && SSL_get_error(tls->ssl, tls->n) == SSL_ERROR_WANT_READ)
+    int n = BIO_write(tls->rbio, tls->W + tls->w++, sizeof p),
+      err = SSL_get_error(tls->ssl, n);
+      tls->n += n;
+
+    if (err == SSL_ERROR_WANT_READ ||
+      err == SSL_ERROR_WANT_WRITE)
+    {
+      fprintf(stdout, "Want IO n = %zu\n", tls->n);
+    }
+    if (err == SSL_ERROR_ZERO_RETURN)
+    {
+      fprintf(stdout, "Zero return n = %zu\n", tls->n);
+    }
+    if (err == SSL_ERROR_ZERO_RETURN)
+    {
+      fprintf(stdout, "Error none n = %zu\n", tls->n);
+    }
+    if (err == SSL_ERROR_ZERO_RETURN)
+    {
+      fprintf(stdout, "Error syscall n = %zu\n", tls->n);
+    }
+    if (err == SSL_ERROR_WANT_READ || 
+      err == SSL_ERROR_WANT_WRITE  || 
+      err == SSL_ERROR_ZERO_RETURN ||
+      err == SSL_ERROR_NONE || 
+      err == SSL_ERROR_SYSCALL)
       continue;
-    if (SSL_read(tls->ssl, R, tls->n < r ? tls->n : r) > 0)
+    fprintf(stdout, "%zu %zu\n", tls->n, r);
+    r = tls->n < r ? tls->n : r;
+    fprintf(stdout, "%zu %zu\n", tls->n, r);
+    //return SSL_read(tls->ssl, R, r) == r;
+    if (SSL_read(tls->ssl, R, r) == r)
       return true;
   }
+
   return false;
 }
 
+bool readsock_ssl(char R[], void *proto)
+{
+  char p;
+  tls_t *tls = proto;
+  SSL_set_bio(tls->ssl, tls->rbio, tls->rbio);
+  while (pollin(tls->tcp, 100) && readsock(&p, tls->tcp))
+  {
+    tls->W[tls->w] = p;
+    tls->W[tls->w + 1] = '\0';
+    tls->n += BIO_write(tls->rbio, tls->W + tls->w++, sizeof p);
+  }
+  
+  return SSL_read(tls->ssl, R, tls->n) == tls->n;
+}
+*/
+bool readsock_ssl(char *R, tcp_t *tcp)
+{
+  char p;
+  tls_t *tls = &tcp->tls;
+  SSL_set_bio(tls->ssl, tls->rbio, tls->rbio);
+  while (pollin(tcp, 100) && readsock(&p, tcp))
+  {
+    tls->W[tls->w] = p;
+    tls->W[tls->w + 1] = '\0';
+    tls->n += BIO_write(tls->rbio, tls->W + tls->w++, sizeof p);
+  }
+  
+  return SSL_read(tls->ssl, R, tls->n) > 0;
+}
