@@ -14,7 +14,7 @@ int main(const int argc, const char *argv[])
   {
     fprintf(stdout, "Connected\n");
     char head[256] = { 0 }, body[1024] = { 0 };
-    if (performreq(body, head, &tcp, argv[2]))
+    if (performreq(body, head, &tcp, NULL, 0, argv[2]))
     {
       fprintf(stdout, "%s\n", head);
       fprintf(stdout, "%s\n", body);

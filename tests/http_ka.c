@@ -18,7 +18,7 @@ int main(const int argc, const char *argv[])
   for (unsigned i = 0; i < 100; i++)
   {
     char head[256] = { 0 }, body[1024] = { 0 };
-    if (performreq(body, head, &tcp, argv[2]))
+    if (performreq(body, head, &tcp, NULL, 0, argv[2]))
       fprintf(stdout, "%s\n", body);
     else
       fprintf(stdout, "Unable to performreq()\n");
