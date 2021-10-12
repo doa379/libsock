@@ -15,7 +15,7 @@ struct tcp
   char HOST[128];
   tls_t tls;
   bool (*write)(tcp_t *, const char []);
-  void (*readfilter)(char [], tcp_t *);
+  bool (*read)(char *, tcp_t *);
   size_t n;
   bool ssl;
 };
@@ -26,7 +26,6 @@ bool pollin(tcp_t *, const int);
 bool pollout(tcp_t *, const int);
 bool writesock(tcp_t *, const char []);
 bool readsock(char *, tcp_t *);
-void readfilter(char [], tcp_t *);
 bool sendreq(tcp_t *, const char *[], const unsigned, const char []);
 bool performreq(char [], char [], tcp_t *, const char *[], const unsigned, const char []);
 void req(char [], tcp_t *);

@@ -14,8 +14,8 @@ int main(const int ARGC, const char *ARGV[])
   char HEAD[32768], BODY[32768];
   if (performreq(BODY, HEAD, &tcp, HEADER, 1, "/"))
   {
-    fprintf(stdout, "%s\n", HEAD);
-    //fprintf(stdout, "%s\n", BODY);
+    fprintf(stdout, "HEAD:\n%s\n", HEAD);
+    fprintf(stdout, "BODY:\n%s\n", BODY);
     fprintf(stdout, "Receive complete\n");
   }
 
