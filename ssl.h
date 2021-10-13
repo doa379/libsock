@@ -12,13 +12,12 @@ typedef struct
 {
   SSL *ssl;
   BIO *r, *w, *s;
-  char W[100000];
-  size_t n;
 } tls_t;
 
 bool init_tls(const char [], const char []);
 void init_clienttls(tls_t *, const int);
 void deinit_clienttls(tls_t *);
-bool writesock_ssl(tcp_t *, const char []);
-bool readsock_ssl(char *, tcp_t *);
+bool write_ssl(tcp_t *, const char []);
+void bio_write(char [], tcp_t *, char);
+bool read_ssl(char *, tcp_t *);
 #endif

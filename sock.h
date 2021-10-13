@@ -7,7 +7,14 @@
 
 static const char AGENT[] = "TCPRequest";
 static const unsigned INTERNAL_TIMEOUTMS = 250;
-
+/*
+typedef struct tcp tcp_t;
+typedef union
+{
+  tcp_t *tcp;
+  tls_t *tls;
+} proto_t;
+*/
 struct tcp
 {
   int sockfd;
@@ -15,7 +22,8 @@ struct tcp
   char HOST[128];
   tls_t tls;
   bool (*write)(tcp_t *, const char []);
-  bool (*read)(char *, tcp_t *);
+  void (*readfilter)(char [], tcp_t *, char);
+  bool (*postread)(char *, tcp_t *);
   size_t n;
   bool ssl;
 };
@@ -26,8 +34,9 @@ bool pollin(tcp_t *, const int);
 bool pollout(tcp_t *, const int);
 bool writesock(tcp_t *, const char []);
 bool readsock(char *, tcp_t *);
+void readfilter(char [], tcp_t *, char);
+bool postread(char *, tcp_t *);
 bool sendreq(tcp_t *, const char *[], const unsigned, const char []);
 bool performreq(char [], char [], tcp_t *, const char *[], const unsigned, const char []);
-void req(char [], tcp_t *);
-void req_header(char [], tcp_t *);
+bool req(char [], tcp_t *);
 #endif

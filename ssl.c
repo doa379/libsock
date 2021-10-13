@@ -27,21 +27,21 @@ void init_clienttls(tls_t *tls, const int sockfd)
   tls->r = BIO_new(BIO_s_mem());
   tls->w = BIO_new(BIO_s_mem());
   tls->s = BIO_new_socket(sockfd, BIO_NOCLOSE);
-  SSL_set_bio(tls->ssl, tls->s, tls->s);
+  //SSL_set_bio(tls->ssl, tls->s, tls->s);
   SSL_set_connect_state(tls->ssl); /* ssl client mode */
 }
 
 void deinit_clienttls(tls_t *tls)
 {
   SSL_free(tls->ssl);
-  SSL_CTX_free(ctx);
 }
 
-bool writesock_ssl(tcp_t *tcp, const char S[])
+bool write_ssl(tcp_t *tcp, const char S[])
 {
-  //SSL_set_bio(tls->ssl, tls->s, tls->s);
+  tls_t *tls = &tcp->tls;
+  SSL_set_bio(tls->ssl, tls->s, tls->s);
   const size_t NS = strlen(S);
-  return SSL_write(tcp->tls.ssl, S, NS) == NS;
+  return SSL_write(tls->ssl, S, NS) == NS;
 }
 /*
 bool readsock_ssl(char R[], tcp_t *tcp)
@@ -58,22 +58,16 @@ bool readsock_ssl(char R[], tcp_t *tcp)
   
   return SSL_read(tls->ssl, R, tls->n) > 0;
 }
-
-void read_ssl(char R[], char p, tcp_t *tcp)
+*/
+void bio_write(char R[], tcp_t *tcp, char p) // readfilter
 {
   tls_t *tls = &tcp->tls;
-  R[tls->n] = p;
-  R[tls->n + 1] = '\0';
-  BIO_set_write_buf_size(tls->r, 1);
-  tls->n += BIO_write(tls->r, R + tls->n++, sizeof p);
-  SSL_set_bio(tls->ssl, tls->r, tls->r);
-  if (SSL_read(tls->ssl, tls->W + tls->n++, tls->n) > 0)
-    ;
-    //R[0] = '\0';
+  BIO_write(tls->r, &p, sizeof p);
 }
-*/
 
-bool readsock_ssl(char *p, tcp_t *tcp)
+bool read_ssl(char *p, tcp_t *tcp) // postread
 {
-  return SSL_read(tcp->tls.ssl, p, sizeof *p) > 0;
+  tls_t *tls = &tcp->tls;
+  SSL_set_bio(tls->ssl, tls->r, tls->r);
+  return SSL_read(tls->ssl, p, sizeof *p) > 0;
 }
