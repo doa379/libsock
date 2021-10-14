@@ -46,7 +46,6 @@ bool init(tcp_t *tcp, const char HOST[], const char PORT[])
         tcp->write = write_ssl;
         tcp->readfilter = bio_write;
         tcp->postread = read_ssl;
-        tcp->ssl = 1;
       }
 
       freeaddrinfo(result);
@@ -62,7 +61,7 @@ bool init(tcp_t *tcp, const char HOST[], const char PORT[])
 
 void deinit(tcp_t *tcp)
 {
-  if (tcp->ssl)
+  if (tcp->tls.ssl)
     deinit_clienttls(&tcp->tls);
   if (close(tcp->sockfd) > -1)
     tcp->sockfd = -1;
@@ -91,14 +90,20 @@ bool readsock(char *p, tcp_t *tcp)
   return read(tcp->sockfd, p, sizeof *p) > 0;
 }
 
-void readfilter(char R[], tcp_t *tcp, char p)
+void readfilter(tcp_t *tcp, char p)
 {
-  R[tcp->n++] = p;
-  R[tcp->n] = '\0';
+  tcp->p = p;
 }
 
 bool postread(char *p, tcp_t *tcp)
 {
+  if (tcp->p != '\0')
+  {
+    *p = tcp->p;
+    tcp->p = '\0';
+    return true;
+  }
+
   return false;
 }
 
@@ -118,22 +123,42 @@ bool sendreq(tcp_t *tcp, const char *H[], const unsigned NH, const char ENDP[])
   return tcp->write(tcp, R);
 }
 
-bool req(char R[], tcp_t *tcp)
+bool req(char *r, tcp_t *tcp, char *p)
 {
-  char p;
-  if (readsock(&p, tcp))
+  if (tcp->postread(p, tcp))
   {
-    tcp->readfilter(R, tcp, p);
-    while (tcp->postread(&p, tcp))
-    {
-      R[tcp->n++] = p;
-      R[tcp->n] = '\0';
-    }
-    
+    *r = *p;
+    *(r + 1) = '\0';
     return true;
   }
 
   return false;
+}
+
+void req_head(char R[], tcp_t *tcp)
+{
+  char p;
+  size_t i = 0;
+  while (pollin(tcp, INTERNAL_TIMEOUTMS) && 
+    !strstr(R, "\r\n\r\n") && readsock(&p, tcp))
+  {
+    tcp->readfilter(tcp, p);
+    while (!strstr(R, "\r\n\r\n") && req(&R[i], tcp, &p))
+      i++;
+  }
+}
+
+void req_body(char R[], tcp_t *tcp, size_t l)
+{
+  char p;
+  size_t i = 0;
+  while (pollin(tcp, INTERNAL_TIMEOUTMS) && 
+    i < l && readsock(&p, tcp))
+  {
+    tcp->readfilter(tcp, p);
+    while (i < l && req(&R[i], tcp, &p))
+      i++;
+  }
 }
 
 size_t parse_cl(const char S[])
@@ -157,15 +182,9 @@ bool performreq(char BODY[], char HEAD[], tcp_t *tcp, const char *H[], const uns
 {
   if (sendreq(tcp, H, NH, ENDP))
   {
-    tcp->n = 0;
-    while (pollin(tcp, INTERNAL_TIMEOUTMS) && 
-      req(HEAD, tcp) && 
-        !strstr(HEAD, "\r\n\r\n"));
+    req_head(HEAD, tcp);
     size_t len = parse_cl(HEAD);
-    tcp->n = 0;
-    while (pollin(tcp, INTERNAL_TIMEOUTMS) && 
-      req(BODY, tcp) &&
-        tcp->n < len);
+    req_body(BODY, tcp, len);
     return true;
   }
 

@@ -1,7 +1,6 @@
 #include <openssl/err.h>
 #include <openssl/pem.h>
 #include <string.h>
-#include <unistd.h>
 #include <libsock/sock.h>
 #include <libsock/ssl.h>
 
@@ -27,7 +26,6 @@ void init_clienttls(tls_t *tls, const int sockfd)
   tls->r = BIO_new(BIO_s_mem());
   tls->w = BIO_new(BIO_s_mem());
   tls->s = BIO_new_socket(sockfd, BIO_NOCLOSE);
-  //SSL_set_bio(tls->ssl, tls->s, tls->s);
   SSL_set_connect_state(tls->ssl); /* ssl client mode */
 }
 
@@ -43,29 +41,14 @@ bool write_ssl(tcp_t *tcp, const char S[])
   const size_t NS = strlen(S);
   return SSL_write(tls->ssl, S, NS) == NS;
 }
-/*
-bool readsock_ssl(char R[], tcp_t *tcp)
-{
-  char p;
-  tls_t *tls = &tcp->tls;
-  SSL_set_bio(tls->ssl, tls->r, tls->r);
-  while (pollin(tls->tcp, 100) && readsock(&p, tls->tcp))
-  {
-    tls->W[tls->w] = p;
-    tls->W[tls->w + 1] = '\0';
-    tls->n += BIO_write(tls->rbio, tls->W + tls->w++, sizeof p);
-  }
-  
-  return SSL_read(tls->ssl, R, tls->n) > 0;
-}
-*/
-void bio_write(char R[], tcp_t *tcp, char p) // readfilter
+
+void bio_write(tcp_t *tcp, char p)
 {
   tls_t *tls = &tcp->tls;
   BIO_write(tls->r, &p, sizeof p);
 }
 
-bool read_ssl(char *p, tcp_t *tcp) // postread
+bool read_ssl(char *p, tcp_t *tcp)
 {
   tls_t *tls = &tcp->tls;
   SSL_set_bio(tls->ssl, tls->r, tls->r);
