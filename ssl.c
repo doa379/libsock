@@ -1,8 +1,9 @@
 #include <openssl/err.h>
 #include <openssl/pem.h>
 #include <string.h>
-#include <libsock/sock.h>
 #include <libsock/ssl.h>
+
+static SSL_CTX *ctx;
 
 bool init_tls(const char CERT[], const char KEY[])
 {
@@ -34,23 +35,20 @@ void deinit_clienttls(tls_t *tls)
   SSL_free(tls->ssl);
 }
 
-bool write_ssl(tcp_t *tcp, const char S[])
+bool write_ssl(tls_t *tls, const char S[])
 {
-  tls_t *tls = &tcp->tls;
   SSL_set_bio(tls->ssl, tls->s, tls->s);
   const size_t NS = strlen(S);
   return SSL_write(tls->ssl, S, NS) == NS;
 }
 
-void bio_write(tcp_t *tcp, char p)
+void bio_write(tls_t *tls, char p)
 {
-  tls_t *tls = &tcp->tls;
   BIO_write(tls->r, &p, sizeof p);
 }
 
-bool read_ssl(char *p, tcp_t *tcp)
+bool read_ssl(char *p, tls_t *tls)
 {
-  tls_t *tls = &tcp->tls;
   SSL_set_bio(tls->ssl, tls->r, tls->r);
   return SSL_read(tls->ssl, p, sizeof *p) > 0;
 }

@@ -9,6 +9,9 @@
 #include <stdlib.h>
 #include <libsock/sock.h>
 
+static const char AGENT[] = "TCPRequest";
+static const unsigned INTERNAL_TIMEOUTMS = 500;
+
 void init_poll(tcp_t *tcp)
 {
   tcp->pollfd.fd = tcp->sockfd;
@@ -42,10 +45,10 @@ bool init(tcp_t *tcp, const char HOST[], const char PORT[])
       if (!strcmp(PORT, "https") || !strcmp(PORT, "443"))
       {
         init_tls(NULL, NULL); /* anon secure */
-        init_clienttls(&tcp->tls, tcp->sockfd);
-        tcp->write = write_ssl;
-        tcp->readfilter = bio_write;
-        tcp->postread = read_ssl;
+        init_clienttls(&tcp->proto.tls, tcp->sockfd);
+        tcp->write = writesock_ssl;
+        tcp->readfilter = readfilter_ssl;
+        tcp->postread = postread_ssl;
       }
 
       freeaddrinfo(result);
@@ -61,8 +64,8 @@ bool init(tcp_t *tcp, const char HOST[], const char PORT[])
 
 void deinit(tcp_t *tcp)
 {
-  if (tcp->tls.ssl)
-    deinit_clienttls(&tcp->tls);
+  if (tcp->proto.tls.ssl)
+    deinit_clienttls(&tcp->proto.tls);
   if (close(tcp->sockfd) > -1)
     tcp->sockfd = -1;
 }
@@ -79,32 +82,47 @@ bool pollout(tcp_t *tcp, const int timeout_ms)
     (tcp->pollfd.revents & POLLOUT);
 }
 
+bool readsock(char *p, tcp_t *tcp)
+{
+  return read(tcp->sockfd, p, sizeof *p) > 0;
+}
+
 bool writesock(tcp_t *tcp, const char S[])
 {
   size_t s = strlen(S);
   return write(tcp->sockfd, S, s) == s;
 }
 
-bool readsock(char *p, tcp_t *tcp)
+bool writesock_ssl(tcp_t *tcp, const char S[])
 {
-  return read(tcp->sockfd, p, sizeof *p) > 0;
+  return write_ssl(&tcp->proto.tls, S);
 }
 
-void readfilter(tcp_t *tcp, char p)
+void readfilter(proto_t *proto, char p)
 {
-  tcp->p = p;
+  proto->p = p;
 }
 
-bool postread(char *p, tcp_t *tcp)
+void readfilter_ssl(proto_t *proto, char p)
 {
-  if (tcp->p != '\0')
+  bio_write(&proto->tls, p);
+}
+
+bool postread(char *p, proto_t *proto)
+{
+  if (proto->p != '\0')
   {
-    *p = tcp->p;
-    tcp->p = '\0';
+    *p = proto->p;
+    proto->p = '\0';
     return true;
   }
 
   return false;
+}
+
+bool postread_ssl(char *p, proto_t *proto)
+{
+  return read_ssl(p, &proto->tls);
 }
 
 bool sendreq(tcp_t *tcp, const char *H[], const unsigned NH, const char ENDP[])
@@ -125,7 +143,7 @@ bool sendreq(tcp_t *tcp, const char *H[], const unsigned NH, const char ENDP[])
 
 bool req(char *r, tcp_t *tcp, char *p)
 {
-  if (tcp->postread(p, tcp))
+  if (tcp->postread(p, &tcp->proto))
   {
     *r = *p;
     *(r + 1) = '\0';
@@ -142,7 +160,7 @@ void req_head(char R[], tcp_t *tcp)
   while (pollin(tcp, INTERNAL_TIMEOUTMS) && 
     !strstr(R, "\r\n\r\n") && readsock(&p, tcp))
   {
-    tcp->readfilter(tcp, p);
+    tcp->readfilter(&tcp->proto, p);
     while (!strstr(R, "\r\n\r\n") && req(&R[i], tcp, &p))
       i++;
   }
@@ -155,7 +173,7 @@ void req_body(char R[], tcp_t *tcp, size_t l)
   while (pollin(tcp, INTERNAL_TIMEOUTMS) && 
     i < l && readsock(&p, tcp))
   {
-    tcp->readfilter(tcp, p);
+    tcp->readfilter(&tcp->proto, p);
     while (i < l && req(&R[i], tcp, &p))
       i++;
   }
