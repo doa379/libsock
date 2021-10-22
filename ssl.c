@@ -14,10 +14,10 @@ bool init_tls(const char CERT[], const char KEY[])
   ERR_load_crypto_strings();
   if (!(ctx = SSL_CTX_new(TLS_client_method()))) /* mode */
     return false;
-  return (!(CERT && KEY &&
-    (SSL_CTX_use_certificate_file(ctx, CERT, SSL_FILETYPE_PEM) < 1 ||
-      SSL_CTX_use_PrivateKey_file(ctx, KEY, SSL_FILETYPE_PEM) < 1 ||
-        SSL_CTX_check_private_key(ctx) < 1)));
+  return CERT && KEY &&
+    SSL_CTX_use_certificate_file(ctx, CERT, SSL_FILETYPE_PEM) > 0 &&
+      SSL_CTX_use_PrivateKey_file(ctx, KEY, SSL_FILETYPE_PEM) > 0 &&
+        SSL_CTX_check_private_key(ctx) > 0;
 }
 
 void init_clienttls(tls_t *tls, const int sockfd)
@@ -38,7 +38,7 @@ void deinit_clienttls(tls_t *tls)
 bool write_ssl(tls_t *tls, const char S[])
 {
   SSL_set_bio(tls->ssl, tls->s, tls->s);
-  const size_t NS = strlen(S);
+  const ssize_t NS = strlen(S);
   return SSL_write(tls->ssl, S, NS) == NS;
 }
 

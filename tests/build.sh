@@ -3,5 +3,4 @@
 cd ../
 make clean && make -j3
 cd tests/
-make clean && make -j3
-$@
+make clean && make -j3 $@
