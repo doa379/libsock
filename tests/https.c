@@ -12,7 +12,7 @@ int main(const int ARGC, const char *ARGV[])
 
   const char *HEADER[1] = { "Connection: close" };
   char HEAD[32768], BODY[32768];
-  if (performreq(BODY, HEAD, &tcp, HEADER, 1, "/"))
+  if (performreq(BODY, HEAD, &tcp, HEADER, 0, "/"))
   {
     fprintf(stdout, "HEAD:\n%s\n", HEAD);
     fprintf(stdout, "BODY:\n%s\n", BODY);

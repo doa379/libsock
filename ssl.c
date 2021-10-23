@@ -2,6 +2,7 @@
 #include <openssl/pem.h>
 #include <string.h>
 #include <libsock/ssl.h>
+#include <unistd.h>
 
 static SSL_CTX *ctx;
 
@@ -19,7 +20,23 @@ bool init_tls(const char CERT[], const char KEY[])
       SSL_CTX_use_PrivateKey_file(ctx, KEY, SSL_FILETYPE_PEM) > 0 &&
         SSL_CTX_check_private_key(ctx) > 0;
 }
+/*
+void handshake(tls_t *tls, const int sockfd)
+{
+  char buffer[32768] = { 0 };
+  ssize_t NRW;
+  while (!SSL_is_init_finished(tls->ssl))
+  {
+    SSL_do_handshake(tls->ssl);
+    if ((NRW = BIO_read(tls->w, buffer, sizeof buffer)) > 0)
+      write(sockfd, buffer, NRW);
+    else if ((NRW = read(sockfd, buffer, sizeof buffer)) > 0)
+      BIO_write(tls->r, buffer, NRW);
+  }
 
+  printf("Host SSL handshake done!\n");
+}
+*/
 void init_clienttls(tls_t *tls, const int sockfd)
 {
   memset(tls, 0, sizeof *tls);
@@ -27,7 +44,10 @@ void init_clienttls(tls_t *tls, const int sockfd)
   tls->r = BIO_new(BIO_s_mem());
   tls->w = BIO_new(BIO_s_mem());
   tls->s = BIO_new_socket(sockfd, BIO_NOCLOSE);
-  SSL_set_connect_state(tls->ssl); /* ssl client mode */
+  //SSL_set_bio(tls->ssl, tls->r, tls->w);
+  SSL_set_connect_state(tls->ssl); /* client mode */
+  //handshake(tls, sockfd);
+  //SSL_connect(tls->ssl);
 }
 
 void deinit_clienttls(tls_t *tls)
@@ -35,11 +55,11 @@ void deinit_clienttls(tls_t *tls)
   SSL_free(tls->ssl);
 }
 
-bool write_ssl(tls_t *tls, const char S[])
+ssize_t write_ssl(tls_t *tls, char S[], const ssize_t NS)
 {
   SSL_set_bio(tls->ssl, tls->s, tls->s);
-  const ssize_t NS = strlen(S);
-  return SSL_write(tls->ssl, S, NS) == NS;
+  return SSL_write(tls->ssl, S, NS);
+  //return BIO_read(tls->w, S, NS);
 }
 
 void bio_write(tls_t *tls, char p)
@@ -48,7 +68,7 @@ void bio_write(tls_t *tls, char p)
 }
 
 bool read_ssl(char *p, tls_t *tls)
-{
+{    
   SSL_set_bio(tls->ssl, tls->r, tls->r);
   return SSL_read(tls->ssl, p, sizeof *p) > 0;
 }

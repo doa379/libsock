@@ -11,17 +11,17 @@
 #include <fcntl.h>
 
 static const char AGENT[] = "TCPRequest";
-static const unsigned INTERNAL_TIMEOUTMS = 500;
+static const unsigned INTERNAL_TIMEOUTMS = 100;
 
 void init_poll(tcp_t *tcp)
 {
   tcp->pollfd.fd = tcp->sockfd;
-  tcp->pollfd.revents = 0;
 }
 
 bool pollin(tcp_t *tcp, const int timeout_ms)
 {
   tcp->pollfd.events = POLLIN;
+  tcp->pollfd.revents = 0;
   return poll(&tcp->pollfd, 1, timeout_ms) > 0 &&
     (tcp->pollfd.revents & POLLIN);
 }
@@ -29,6 +29,7 @@ bool pollin(tcp_t *tcp, const int timeout_ms)
 bool pollout(tcp_t *tcp, const int timeout_ms)
 {
   tcp->pollfd.events = POLLOUT;
+  tcp->pollfd.revents = 0;
   return poll(&tcp->pollfd, 1, timeout_ms) > 0 &&
     (tcp->pollfd.revents & POLLOUT);
 }
@@ -37,6 +38,7 @@ bool pollerr(tcp_t *tcp, const int timeout_ms)
 {
   int err = POLLERR | POLLHUP | POLLNVAL;
   tcp->pollfd.events = err;
+  tcp->pollfd.revents = 0;
   return poll(&tcp->pollfd, 1, timeout_ms) > 0 &&
     (tcp->pollfd.revents & err);
 }
@@ -73,7 +75,7 @@ bool init(tcp_t *tcp, const char HOST[], const char PORT[])
       tcp->write = writesock;
       tcp->readfilter = readfilter;
       tcp->postread = postread;
-      if (!strcmp(PORT, "https") || !strstr(PORT, "443"))
+      if (!strcmp(PORT, "https") || strstr(PORT, "443"))
       {
         init_tls(NULL, NULL); /* anon secure */
         init_clienttls(&tcp->proto.tls, tcp->sockfd);
@@ -106,15 +108,16 @@ bool readsock(char *p, tcp_t *tcp)
   return read(tcp->sockfd, p, sizeof *p) > 0;
 }
 
-bool writesock(tcp_t *tcp, const char S[])
+bool writesock(tcp_t *tcp, char S[], const ssize_t NS)
 {
-  ssize_t s = strlen(S);
-  return write(tcp->sockfd, S, s) == s;
+  return write(tcp->sockfd, S, NS) == NS;
 }
 
-bool writesock_ssl(tcp_t *tcp, const char S[])
+bool writesock_ssl(tcp_t *tcp, char S[], const ssize_t NS)
 {
-  return write_ssl(&tcp->proto.tls, S);
+  ssize_t NR = write_ssl(&tcp->proto.tls, S, NS);
+  //return writesock(tcp, S, NR);
+  return NR;
 }
 
 void readfilter(proto_t *proto, char p)
@@ -142,22 +145,6 @@ bool postread(char *p, proto_t *proto)
 bool postread_ssl(char *p, proto_t *proto)
 {
   return read_ssl(p, &proto->tls);
-}
-
-bool sendreq(tcp_t *tcp, const char *H[], const unsigned NH, const char ENDP[])
-{
-  char R[512];
-  sprintf(R, 
-    "GET %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: %s\r\nAccept: */*\r\n", 
-      ENDP, tcp->HOST, AGENT);
-  for (unsigned i = 0; i < NH; i++)
-  {
-    strcat(R, H[i]);
-    strcat(R, "\r\n");
-  }
-  
-  strcat(R, "\r\n");
-  return tcp->write(tcp, R);
 }
 
 bool req(char *r, tcp_t *tcp, char *p)
@@ -189,7 +176,7 @@ void req_body(char R[], tcp_t *tcp, size_t l)
 {
   char p;
   size_t i = 0;
-  while (pollin(tcp, INTERNAL_TIMEOUTMS) && 
+  while (pollin(tcp, INTERNAL_TIMEOUTMS) &&
     i < l && readsock(&p, tcp))
   {
     tcp->readfilter(&tcp->proto, p);
@@ -215,9 +202,25 @@ size_t parse_cl(const char S[])
   return 0;
 }
 
+bool sendreq(tcp_t *tcp, const char *H[], const unsigned NH, const char ENDP[])
+{
+  char R[4096];
+  sprintf(R, 
+    "GET %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: %s\r\nAccept: */*\r\n", 
+      ENDP, tcp->HOST, AGENT);
+  for (unsigned i = 0; i < NH; i++)
+  {
+    strcat(R, H[i]);
+    strcat(R, "\r\n");
+  }
+  
+  strcat(R, "\r\n");
+  return tcp->write(tcp, R, sizeof R);
+}
+
 bool performreq(char BODY[], char HEAD[], tcp_t *tcp, const char *H[], const unsigned NH, const char ENDP[])
 {
-  if (!pollerr(tcp, INTERNAL_TIMEOUTMS) && sendreq(tcp, H, NH, ENDP))
+  if (sendreq(tcp, H, NH, ENDP))
   {
     req_head(HEAD, tcp);
     size_t len = parse_cl(HEAD);

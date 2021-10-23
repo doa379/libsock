@@ -9,7 +9,7 @@ OBJ_LIBSOCK = ${SRC_LIBSOCK:.c=.o}
 CC = clang
 REL_CFLAGS = -std=c99 -c -Wall -fPIE -fPIC -pedantic -O3 ${INCS}
 DEB_CFLAGS = -std=c99 -c -Wall -fPIE -fPIC -pedantic -g ${INCS}
-CFLAGS = ${REL_CFLAGS}
+CFLAGS = ${DEB_CFLAGS}
 LDFLAGS += ${LIBSPATH}
 
 all: libsock.so
