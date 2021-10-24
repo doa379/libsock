@@ -36,7 +36,7 @@ bool pollout(tcp_t *tcp, const int timeout_ms)
 
 bool pollerr(tcp_t *tcp, const int timeout_ms)
 {
-  int err = POLLERR | POLLHUP | POLLNVAL;
+  short err = POLLERR | POLLHUP | POLLNVAL;
   tcp->pollfd.events = err;
   tcp->pollfd.revents = 0;
   return poll(&tcp->pollfd, 1, timeout_ms) > 0 &&
@@ -77,7 +77,7 @@ bool init(tcp_t *tcp, const char HOST[], const char PORT[])
       tcp->postread = postread;
       if (!strcmp(PORT, "https") || strstr(PORT, "443"))
       {
-        init_tls(NULL, NULL); /* anon secure */
+        init_tls(NULL, NULL); /* Key for configure_ctx */
         init_clienttls(&tcp->proto.tls, tcp->sockfd);
         tcp->write = writesock_ssl;
         tcp->readfilter = readfilter_ssl;
@@ -108,16 +108,16 @@ bool readsock(char *p, tcp_t *tcp)
   return read(tcp->sockfd, p, sizeof *p) > 0;
 }
 
-bool writesock(tcp_t *tcp, char S[], const ssize_t NS)
+bool writesock(tcp_t *tcp, char S[], const size_t NS)
 {
   return write(tcp->sockfd, S, NS) == NS;
 }
 
-bool writesock_ssl(tcp_t *tcp, char S[], const ssize_t NS)
+bool writesock_ssl(tcp_t *tcp, char S[], const size_t NS)
 {
   ssize_t NR = write_ssl(&tcp->proto.tls, S, NS);
   //return writesock(tcp, S, NR);
-  return NR;
+  return NR > 0;
 }
 
 void readfilter(proto_t *proto, char p)
@@ -163,12 +163,16 @@ void req_head(char R[], tcp_t *tcp)
 {
   char p;
   size_t i = 0;
-  while (pollin(tcp, INTERNAL_TIMEOUTMS) && 
-    !strstr(R, "\r\n\r\n") && readsock(&p, tcp))
+  while (pollin(tcp, INTERNAL_TIMEOUTMS) && readsock(&p, tcp))
   {
     tcp->readfilter(&tcp->proto, p);
-    while (!strstr(R, "\r\n\r\n") && req(&R[i], tcp, &p))
+    while (req(&R[i], tcp, &p))
+    {
+      if (i > 1 && R[i - 2] == '\n' && 
+          R[i - 1] == '\r' && R[i] == '\n')
+        return;
       i++;
+    }
   }
 }
 
@@ -176,12 +180,15 @@ void req_body(char R[], tcp_t *tcp, size_t l)
 {
   char p;
   size_t i = 0;
-  while (pollin(tcp, INTERNAL_TIMEOUTMS) &&
-    i < l && readsock(&p, tcp))
+  // Pick up any slack from current SSL frame
+  while (i < l && req(&R[i], tcp, &p))
+    i++;
+  while (pollin(tcp, INTERNAL_TIMEOUTMS) && readsock(&p, tcp))
   {
     tcp->readfilter(&tcp->proto, p);
-    while (i < l && req(&R[i], tcp, &p))
-      i++;
+    while (req(&R[i], tcp, &p))
+      if (i++ > l - 1)
+        return;
   }
 }
 
@@ -204,7 +211,7 @@ size_t parse_cl(const char S[])
 
 bool sendreq(tcp_t *tcp, const char *H[], const unsigned NH, const char ENDP[])
 {
-  char R[4096];
+  char R[16384];
   sprintf(R, 
     "GET %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: %s\r\nAccept: */*\r\n", 
       ENDP, tcp->HOST, AGENT);

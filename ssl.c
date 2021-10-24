@@ -20,10 +20,10 @@ bool init_tls(const char CERT[], const char KEY[])
       SSL_CTX_use_PrivateKey_file(ctx, KEY, SSL_FILETYPE_PEM) > 0 &&
         SSL_CTX_check_private_key(ctx) > 0;
 }
-/*
+
 void handshake(tls_t *tls, const int sockfd)
 {
-  char buffer[32768] = { 0 };
+  char buffer[4096] = { 0 };
   ssize_t NRW;
   while (!SSL_is_init_finished(tls->ssl))
   {
@@ -33,17 +33,15 @@ void handshake(tls_t *tls, const int sockfd)
     else if ((NRW = read(sockfd, buffer, sizeof buffer)) > 0)
       BIO_write(tls->r, buffer, NRW);
   }
-
-  printf("Host SSL handshake done!\n");
 }
-*/
+
 void init_clienttls(tls_t *tls, const int sockfd)
 {
   memset(tls, 0, sizeof *tls);
-  tls->ssl = SSL_new(ctx);
   tls->r = BIO_new(BIO_s_mem());
   tls->w = BIO_new(BIO_s_mem());
   tls->s = BIO_new_socket(sockfd, BIO_NOCLOSE);
+  tls->ssl = SSL_new(ctx);
   //SSL_set_bio(tls->ssl, tls->r, tls->w);
   SSL_set_connect_state(tls->ssl); /* client mode */
   //handshake(tls, sockfd);
@@ -55,20 +53,22 @@ void deinit_clienttls(tls_t *tls)
   SSL_free(tls->ssl);
 }
 
-ssize_t write_ssl(tls_t *tls, char S[], const ssize_t NS)
+ssize_t write_ssl(tls_t *tls, char S[], const size_t NS)
 {
   SSL_set_bio(tls->ssl, tls->s, tls->s);
-  return SSL_write(tls->ssl, S, NS);
+  return SSL_write(tls->ssl, S, strlen(S));
+  //BIO_do_handshake(tls->w);
   //return BIO_read(tls->w, S, NS);
 }
 
 void bio_write(tls_t *tls, char p)
 {
+  //BIO_do_handshake(tls->r);
   BIO_write(tls->r, &p, sizeof p);
 }
 
 bool read_ssl(char *p, tls_t *tls)
-{    
+{ 
   SSL_set_bio(tls->ssl, tls->r, tls->r);
   return SSL_read(tls->ssl, p, sizeof *p) > 0;
 }

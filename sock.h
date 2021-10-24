@@ -18,7 +18,7 @@ struct tcp
   struct pollfd pollfd;
   char HOST[128];
   proto_t proto;
-  bool (*write)(tcp_t *, char [], const ssize_t);
+  bool (*write)(tcp_t *, char [], const size_t);
   void (*readfilter)(proto_t *, char);
   bool (*postread)(char *, proto_t *);
 };
@@ -26,8 +26,8 @@ struct tcp
 bool init(tcp_t *, const char [], const char []);
 void deinit(tcp_t *);
 bool readsock(char *, tcp_t *);
-bool writesock(tcp_t *, char [], const ssize_t);
-bool writesock_ssl(tcp_t *, char [], const ssize_t);
+bool writesock(tcp_t *, char [], const size_t);
+bool writesock_ssl(tcp_t *, char [], const size_t);
 void readfilter(proto_t *, char);
 void readfilter_ssl(proto_t *, char);
 bool postread(char *, proto_t *);
