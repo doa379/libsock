@@ -45,7 +45,6 @@ bool pollerr(tcp_t *tcp, const int timeout_ms)
 
 bool init(tcp_t *tcp, const char HOST[], const char PORT[])
 {
-  memset(tcp, 0, sizeof *tcp);
   struct addrinfo hints;
   memset(&hints, 0, sizeof hints);
   hints.ai_family = AF_UNSPEC;
@@ -71,14 +70,15 @@ bool init(tcp_t *tcp, const char HOST[], const char PORT[])
       }
 
       fcntl(tcp->sockfd, F_SETFL, sockflags);
+      memset(&tcp->proto, 0, sizeof tcp->proto);;
       strcpy(tcp->HOST, HOST);
       tcp->write = writesock;
       tcp->readfilter = readfilter;
       tcp->postread = postread;
       if (!strcmp(PORT, "https") || strstr(PORT, "443"))
       {
-        init_tls(NULL, NULL); /* Key for configure_ctx */
-        init_clienttls(&tcp->proto.tls, tcp->sockfd);
+        init_tls();
+        init_client(&tcp->proto.tls, tcp->sockfd);
         tcp->write = writesock_ssl;
         tcp->readfilter = readfilter_ssl;
         tcp->postread = postread_ssl;
@@ -98,7 +98,7 @@ bool init(tcp_t *tcp, const char HOST[], const char PORT[])
 void deinit(tcp_t *tcp)
 {
   if (tcp->proto.tls.ssl)
-    deinit_clienttls(&tcp->proto.tls);
+    deinit_client(&tcp->proto.tls);
   if (close(tcp->sockfd) > -1)
     tcp->sockfd = -1;
 }
@@ -115,9 +115,14 @@ bool writesock(tcp_t *tcp, char S[], const size_t NS)
 
 bool writesock_ssl(tcp_t *tcp, char S[], const size_t NS)
 {
-  ssize_t NR = write_ssl(&tcp->proto.tls, S, NS);
-  //return writesock(tcp, S, NR);
-  return NR > 0;
+  tls_t *tls = &tcp->proto.tls;
+  if (write_ssl(tls, S))
+  {
+    ssize_t NR = bio_read(tls, S, NS);
+    return writesock(tcp, S, NR);
+  }
+
+  return false;
 }
 
 void readfilter(proto_t *proto, char p)
@@ -127,7 +132,8 @@ void readfilter(proto_t *proto, char p)
 
 void readfilter_ssl(proto_t *proto, char p)
 {
-  bio_write(&proto->tls, p);
+  tls_t *tls = &proto->tls;
+  bio_write(tls, p);
 }
 
 bool postread(char *p, proto_t *proto)
