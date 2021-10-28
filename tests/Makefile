@@ -5,7 +5,7 @@ LIBS =
 
 SRC0 = http.c
 OBJ0 = ${SRC0:.c=.o}
-SRC1 = http_ka.c
+SRC1 = keep_alive.c
 OBJ1 = ${SRC1:.c=.o}
 SRC2 = bio_client.c
 OBJ2 = ${SRC2:.c=.o}
@@ -15,10 +15,10 @@ OBJ3 = ${SRC3:.c=.o}
 CC = clang
 REL_CFLAGS = -std=c99 -c -Wall -fPIE -fPIC -pedantic -O3 ${INCS}
 DEB_CFLAGS = -std=c99 -c -Wall -fPIE -fPIC -pedantic -g ${INCS}
-CFLAGS = ${REL_CFLAGS}
+CFLAGS = ${DEB_CFLAGS}
 LDFLAGS += ${LIBSPATH}
 
-all: http http_ka bio_client https
+all: http keep_alive bio_client https
 
 .c.o:
 	@echo CC $<
@@ -28,7 +28,7 @@ http: ${OBJ0}
 	@echo CC -o $@
 	@${CC} -o $@ ${OBJ0} ${LDFLAGS} -l sock
 
-http_ka: ${OBJ1}
+keep_alive: ${OBJ1}
 	@echo CC -o $@
 	@${CC} -o $@ ${OBJ1} ${LDFLAGS} -l sock
 
@@ -43,4 +43,4 @@ https: ${OBJ3}
 clean:
 	@echo Cleaning
 	@rm -f ${OBJ0} ${OBJ1} ${OBJ2} ${OBJ3}
-	@rm -f http http_ka bio_client https
+	@rm -f http keep_alive bio_client https

@@ -4,11 +4,10 @@
 
 static SSL_CTX *ctx;
 
-bool init_tls(void)
+void init_tls(void)
 {
   SSL_library_init();
-  OpenSSL_add_all_algorithms();
-  return (ctx = SSL_CTX_new(TLS_client_method())); /* mode */
+  OpenSSL_add_ssl_algorithms();
 }
 
 bool configure_ctx(const char CERT[], const char KEY[])
@@ -24,6 +23,7 @@ void init_client(tls_t *tls, const int sockfd)
   tls->r = BIO_new(BIO_s_mem());
   tls->w = BIO_new(BIO_s_mem());
   tls->s = BIO_new_socket(sockfd, BIO_NOCLOSE);
+  ctx = SSL_CTX_new(TLS_client_method()); /* mode */
   tls->ssl = SSL_new(ctx);
   /*SSL_set_bio(tls->ssl, tls->r, tls->w); */
   SSL_set_connect_state(tls->ssl); /* client mode */
@@ -31,14 +31,23 @@ void init_client(tls_t *tls, const int sockfd)
 
 void deinit_client(tls_t *tls)
 {
-  SSL_free(tls->ssl);
+  SSL_shutdown(tls->ssl);
+  //SSL_free(tls->ssl);
+  SSL_CTX_free(ctx);
 }
 
 bool write_ssl(tls_t *tls, char S[])
 {
   SSL_set_bio(tls->ssl, tls->s, tls->s);
   size_t NW = strlen(S);
-  return SSL_write(tls->ssl, S, NW) == NW;
+  if (SSL_write(tls->ssl, S, NW) == NW)
+  {
+    fprintf(stdout, "SSL_write() is true\n");
+    return true;
+  }
+
+  fprintf(stdout, "SSL_write() is false\n");
+  return false;
 }
 
 ssize_t bio_read(tls_t *tls, char S[], const size_t NS)

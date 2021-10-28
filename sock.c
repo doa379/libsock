@@ -110,19 +110,21 @@ bool readsock(char *p, tcp_t *tcp)
 
 bool writesock(tcp_t *tcp, char S[], const size_t NS)
 {
-  return write(tcp->sockfd, S, NS) == NS;
+  size_t NW = strlen(S);
+  return write(tcp->sockfd, S, NW) == NW;
 }
 
 bool writesock_ssl(tcp_t *tcp, char S[], const size_t NS)
 {
   tls_t *tls = &tcp->proto.tls;
+  /*
   if (write_ssl(tls, S))
   {
     ssize_t NR = bio_read(tls, S, NS);
     return writesock(tcp, S, NR);
   }
-
-  return false;
+*/
+  return write_ssl(tls, S);
 }
 
 void readfilter(proto_t *proto, char p)
@@ -165,7 +167,7 @@ bool req(char *r, tcp_t *tcp, char *p)
   return false;
 }
 
-void req_head(char R[], tcp_t *tcp)
+bool req_head(char R[], tcp_t *tcp)
 {
   char p;
   size_t i = 0;
@@ -174,28 +176,35 @@ void req_head(char R[], tcp_t *tcp)
     tcp->readfilter(&tcp->proto, p);
     while (req(&R[i], tcp, &p))
     {
-      if (i > 1 && R[i - 2] == '\n' && 
+      if (i > 2 && R[i - 2] == '\n' && 
           R[i - 1] == '\r' && R[i] == '\n')
-        return;
+        return true;
       i++;
     }
   }
+
+  return false;
 }
 
-void req_body(char R[], tcp_t *tcp, size_t l)
+bool req_body(char R[], tcp_t *tcp, size_t l)
 {
   char p;
   size_t i = 0;
   // Pick up any slack from current SSL frame
   while (i < l && req(&R[i], tcp, &p))
     i++;
+  if (i > l - 1)
+    return true;
+
   while (pollin(tcp, INTERNAL_TIMEOUTMS) && readsock(&p, tcp))
   {
     tcp->readfilter(&tcp->proto, p);
     while (req(&R[i], tcp, &p))
-      if (i++ > l - 1)
-        return;
+      if (i++ > l - 2)
+        return true;
   }
+
+  return false;
 }
 
 size_t parse_cl(const char S[])
@@ -235,10 +244,9 @@ bool performreq(char BODY[], char HEAD[], tcp_t *tcp, const char *H[], const uns
 {
   if (sendreq(tcp, H, NH, ENDP))
   {
-    req_head(HEAD, tcp);
-    size_t len = parse_cl(HEAD);
-    req_body(BODY, tcp, len);
-    return true;
+    size_t len;
+    if (req_head(HEAD, tcp) && (len = parse_cl(HEAD)))
+      return req_body(BODY, tcp, len);
   }
 
   return false;
