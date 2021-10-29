@@ -12,6 +12,7 @@
 
 static const char AGENT[] = "TCPRequest";
 static const unsigned INTERNAL_TIMEOUTMS = 100;
+static const unsigned ENCBUFFER_SIZE = 16384;
 
 void init_poll(tcp_t *tcp)
 {
@@ -110,21 +111,21 @@ bool readsock(char *p, tcp_t *tcp)
 
 bool writesock(tcp_t *tcp, char S[], const size_t NS)
 {
-  size_t NW = strlen(S);
-  return write(tcp->sockfd, S, NW) == NW;
+  return write(tcp->sockfd, S, NS) == NS;
 }
 
 bool writesock_ssl(tcp_t *tcp, char S[], const size_t NS)
 {
   tls_t *tls = &tcp->proto.tls;
-  /*
-  if (write_ssl(tls, S))
+  if (write_ssl(tls, S, NS))
   {
-    ssize_t NR = bio_read(tls, S, NS);
-    return writesock(tcp, S, NR);
+    ssize_t Nenc = bio_read(tls, S, ENCBUFFER_SIZE);
+    if (Nenc > 0)
+      S[Nenc] = '\0';
+    return Nenc > 0 && writesock(tcp, S, Nenc);
   }
-*/
-  return write_ssl(tls, S);
+  
+  return false;
 }
 
 void readfilter(proto_t *proto, char p)
@@ -226,7 +227,7 @@ size_t parse_cl(const char S[])
 
 bool sendreq(tcp_t *tcp, const char *H[], const unsigned NH, const char ENDP[])
 {
-  char R[16384];
+  char R[ENCBUFFER_SIZE];
   sprintf(R, 
     "GET %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: %s\r\nAccept: */*\r\n", 
       ENDP, tcp->HOST, AGENT);
@@ -237,17 +238,13 @@ bool sendreq(tcp_t *tcp, const char *H[], const unsigned NH, const char ENDP[])
   }
   
   strcat(R, "\r\n");
-  return tcp->write(tcp, R, sizeof R);
+  return tcp->write(tcp, R, strlen(R));
 }
 
 bool performreq(char BODY[], char HEAD[], tcp_t *tcp, const char *H[], const unsigned NH, const char ENDP[])
 {
-  if (sendreq(tcp, H, NH, ENDP))
-  {
-    size_t len;
-    if (req_head(HEAD, tcp) && (len = parse_cl(HEAD)))
-      return req_body(BODY, tcp, len);
-  }
-
-  return false;
+  size_t cl;
+  return sendreq(tcp, H, NH, ENDP) && 
+    req_head(HEAD, tcp) && (cl = parse_cl(HEAD)) &&
+      req_body(BODY, tcp, cl);
 }
