@@ -19,8 +19,12 @@ int main(const int argc, const char *argv[])
       fprintf(stdout, "%s\n", head);
       fprintf(stdout, "%s\n", body);
     }
+  
+    deinit(&tcp);
   }
 
-  deinit(&tcp);
+  else
+    fprintf(stdout, "Failed to init tcp\n");
+
   return 0;
 }

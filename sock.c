@@ -8,7 +8,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <libsock/sock.h>
-#include <fcntl.h>
 
 static const char AGENT[] = "TCPRequest";
 static const unsigned INTERNAL_TIMEOUTMS = 100;
@@ -17,31 +16,6 @@ static const unsigned ENCBUFFER_SIZE = 16384;
 void init_poll(tcp_t *tcp)
 {
   tcp->pollfd.fd = tcp->sockfd;
-}
-
-bool pollin(tcp_t *tcp, const int timeout_ms)
-{
-  tcp->pollfd.events = POLLIN;
-  tcp->pollfd.revents = 0;
-  return poll(&tcp->pollfd, 1, timeout_ms) > 0 &&
-    (tcp->pollfd.revents & POLLIN);
-}
-
-bool pollout(tcp_t *tcp, const int timeout_ms)
-{
-  tcp->pollfd.events = POLLOUT;
-  tcp->pollfd.revents = 0;
-  return poll(&tcp->pollfd, 1, timeout_ms) > 0 &&
-    (tcp->pollfd.revents & POLLOUT);
-}
-
-bool pollerr(tcp_t *tcp, const int timeout_ms)
-{
-  short err = POLLERR | POLLHUP | POLLNVAL;
-  tcp->pollfd.events = err;
-  tcp->pollfd.revents = 0;
-  return poll(&tcp->pollfd, 1, timeout_ms) > 0 &&
-    (tcp->pollfd.revents & err);
 }
 
 bool init(tcp_t *tcp, const char HOST[], const char PORT[])
@@ -58,20 +32,10 @@ bool init(tcp_t *tcp, const char HOST[], const char PORT[])
 
   for (struct addrinfo *rp = result; rp; rp = rp->ai_next)
   {
-    if ((tcp->sockfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol)) > -1)
+    if ((tcp->sockfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol)) > -1 &&
+      connect(tcp->sockfd, rp->ai_addr, rp->ai_addrlen) > -1)
     {
-      int sockflags = fcntl(tcp->sockfd, F_GETFL, NULL);
-      fcntl(tcp->sockfd, F_SETFL, sockflags | O_NONBLOCK);
-      connect(tcp->sockfd, rp->ai_addr, rp->ai_addrlen);
       init_poll(tcp);
-      if (!pollout(tcp, INTERNAL_TIMEOUTMS))
-      {
-        deinit(tcp);
-        continue;
-      }
-
-      fcntl(tcp->sockfd, F_SETFL, sockflags);
-      memset(&tcp->proto, 0, sizeof tcp->proto);;
       strcpy(tcp->HOST, HOST);
       tcp->write = writesock;
       tcp->readfilter = readfilter;
@@ -102,6 +66,31 @@ void deinit(tcp_t *tcp)
     deinit_client(&tcp->proto.tls);
   if (close(tcp->sockfd) > -1)
     tcp->sockfd = -1;
+}
+
+bool pollin(tcp_t *tcp, const int timeout_ms)
+{
+  tcp->pollfd.events = POLLIN;
+  tcp->pollfd.revents = 0;
+  return poll(&tcp->pollfd, 1, timeout_ms) > 0 &&
+    (tcp->pollfd.revents & POLLIN);
+}
+
+bool pollout(tcp_t *tcp, const int timeout_ms)
+{
+  tcp->pollfd.events = POLLOUT;
+  tcp->pollfd.revents = 0;
+  return poll(&tcp->pollfd, 1, timeout_ms) > 0 &&
+    (tcp->pollfd.revents & POLLOUT);
+}
+
+bool pollerr(tcp_t *tcp, const int timeout_ms)
+{
+  short err = POLLERR | POLLHUP | POLLNVAL;
+  tcp->pollfd.events = err;
+  tcp->pollfd.revents = 0;
+  return poll(&tcp->pollfd, 1, timeout_ms) > 0 &&
+    (tcp->pollfd.revents & err);
 }
 
 bool readsock(char *p, tcp_t *tcp)
@@ -141,7 +130,7 @@ void readfilter_ssl(proto_t *proto, char p)
 
 bool postread(char *p, proto_t *proto)
 {
-  if (proto->p != '\0')
+  if (proto->p)
   {
     *p = proto->p;
     proto->p = '\0';
@@ -156,18 +145,6 @@ bool postread_ssl(char *p, proto_t *proto)
   return read_ssl(p, &proto->tls);
 }
 
-bool req(char *r, tcp_t *tcp, char *p)
-{
-  if (tcp->postread(p, &tcp->proto))
-  {
-    *r = *p;
-    *(r + 1) = '\0';
-    return true;
-  }
-
-  return false;
-}
-
 bool req_head(char R[], tcp_t *tcp)
 {
   char p;
@@ -175,12 +152,15 @@ bool req_head(char R[], tcp_t *tcp)
   while (pollin(tcp, INTERNAL_TIMEOUTMS) && readsock(&p, tcp))
   {
     tcp->readfilter(&tcp->proto, p);
-    while (req(&R[i], tcp, &p))
+    while (tcp->postread(&p, &tcp->proto))
     {
-      if (i > 2 && R[i - 2] == '\n' && 
-          R[i - 1] == '\r' && R[i] == '\n')
+      R[i++] = p;
+      if (i > 3 && R[i - 3] == '\n' && 
+          R[i - 2] == '\r' && R[i - 1] == '\n')
+      {
+        R[i] = '\0';
         return true;
-      i++;
+      }
     }
   }
 
@@ -192,17 +172,26 @@ bool req_body(char R[], tcp_t *tcp, size_t l)
   char p;
   size_t i = 0;
   // Pick up any slack from current SSL frame
-  while (i < l && req(&R[i], tcp, &p))
-    i++;
+  while (i < l && tcp->postread(&p, &tcp->proto))
+    R[i++] = p;
   if (i > l - 1)
+  {
+    R[l] = '\0';
     return true;
+  }
 
   while (pollin(tcp, INTERNAL_TIMEOUTMS) && readsock(&p, tcp))
   {
     tcp->readfilter(&tcp->proto, p);
-    while (req(&R[i], tcp, &p))
-      if (i++ > l - 2)
+    while (tcp->postread(&p, &tcp->proto))
+    {
+      R[i++] = p;
+      if (i > l - 1)
+      {
+        R[l] = '\0';
         return true;
+      }
+    }
   }
 
   return false;
