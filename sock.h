@@ -29,15 +29,13 @@ SOFTWARE.
 #include <poll.h>
 #include <libsock/ssl.h>
 
-typedef union
-{
+typedef union {
   char p;
   tls_t tls;
 } proto_t;
 
 typedef struct tcp tcp_t;
-struct tcp
-{
+struct tcp {
   int sockfd;
   struct pollfd pollfd;
   char HOST[128];

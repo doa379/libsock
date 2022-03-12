@@ -5,8 +5,7 @@
 #include <openssl/bio.h>
 #include <stdbool.h>
 
-typedef struct
-{
+typedef struct {
   BIO *r, *w;
   SSL *ssl;
 } tls_t;
