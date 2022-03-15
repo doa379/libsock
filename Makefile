@@ -12,9 +12,13 @@ REL_CFLAGS = -O3
 REL_LDFLAGS = -s
 DBG_CFLAGS = -g -O0
 DBG_LDFLAGS =
-
 CFLAGS = $(REL_CFLAGS)
 LDFLAGS = $(REL_LDFLAGS)
+
+ifeq ($(DEBUG), 1)
+  CFLAGS = $(DBG_CFLAGS)
+  LDFLAGS = $(DBG_LDFLAGS)
+endif
 
 all: libsock.so
 
@@ -24,9 +28,9 @@ all: libsock.so
 
 libsock.so: $(OBJ_LIBSOCK)
 	@echo CC -o $@
-	@$(CC) -shared -o $@ $(OBJ_LIBSOCK) $(LDFLAGS) $(LIBSPATH) $(LIBS)
+	@$(CC) -shared $(OBJ_LIBSOCK) $(LDFLAGS) $(LIBSPATH) $(LIBS) -o $@
 
 clean:
-	@echo Cleaning
+	@echo Cleaning...
 	@rm -f $(OBJ_LIBSOCK)
 	@rm -f libsock.so

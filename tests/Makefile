@@ -18,9 +18,13 @@ REL_CFLAGS = -O3
 REL_LDFLAGS = -s
 DBG_CFLAGS = -g
 DBG_LDFLAGS =
-
 CFLAGS = $(REL_CFLAGS)
 LDFLAGS = $(REL_LDFLAGS) $(LIBSPATH)
+
+ifeq ($(DEBUG), 1)
+  CFLAGS = $(DBG_CFLAGS)
+  LDFLAGS = $(DBG_LDFLAGS) $(LIBSPATH)
+endif
 
 all: http keep_alive bio_client https
 

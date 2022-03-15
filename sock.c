@@ -54,6 +54,7 @@ bool init(tcp_t *tcp, const char HOST[], const char PORT[]) {
     return false;
 
   for (struct addrinfo *rp = result; rp; rp = rp->ai_next) {
+    memset(tcp, 0, sizeof *tcp);
     if ((tcp->sockfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol)) > -1 &&
       connect(tcp->sockfd, rp->ai_addr, rp->ai_addrlen) > -1) {
       init_poll(tcp);
@@ -61,7 +62,6 @@ bool init(tcp_t *tcp, const char HOST[], const char PORT[]) {
       tcp->write = writesock;
       tcp->readfilter = readfilter;
       tcp->postread = postread;
-      memset(&tcp->proto, 0, sizeof tcp->proto);
       if (!strcmp(PORT, "https") || strstr(PORT, "443")) {
         init_tls();
         init_client(&tcp->proto.tls, tcp->sockfd);
@@ -223,7 +223,7 @@ bool sendreq(tcp_t *tcp, const char *H[], const unsigned NH, const char ENDP[]) 
   }
   
   strcat(R, "\r\n");
-  return tcp->write(tcp, R, strlen(R));
+  return tcp->write && tcp->write(tcp, R, strlen(R));
 }
 
 bool performreq(char BODY[], char HEAD[], tcp_t *tcp, const char *H[], const unsigned NH, const char ENDP[]) {
